@@ -6,11 +6,9 @@ import lombok.Data;
 public class LLMTaskStatus {
 
   private State state;
+  private String errorReason;
 
   public enum State {
-    QUEUED,
-    RUNNING,
-    SUCCEEDED,
-    FAILED
+    QUEUED, RUNNING, SUCCEEDED, FAILED
   }
 }

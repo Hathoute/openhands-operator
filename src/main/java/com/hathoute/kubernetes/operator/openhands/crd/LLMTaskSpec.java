@@ -5,18 +5,11 @@ import lombok.Data;
 
 @Data
 public class LLMTaskSpec {
-  private LLMSpec llm;
+  private String llmName;
 
   private String preScript;
   private String postScript;
   private String prompt;
 
   private PodSpec podSpec;
-
-  @Data
-  public static class LLMSpec {
-    private String modelName;
-    private String apiKey;
-    private String baseUrl;
-  }
 }

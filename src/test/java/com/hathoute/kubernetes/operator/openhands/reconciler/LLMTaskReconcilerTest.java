@@ -2,7 +2,9 @@ package com.hathoute.kubernetes.operator.openhands.reconciler;
 
 import com.hathoute.kubernetes.operator.openhands.AbstractSpringOperatorTest;
 import com.hathoute.kubernetes.operator.openhands.TestUtil;
+import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
+import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.Pod;
 import java.util.List;
@@ -11,8 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_APIVERSION;
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_KIND;
+import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_RESOURCE;
 import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_NAME;
 import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_RESOURCE;
 import static com.hathoute.kubernetes.operator.openhands.TestFixtures.WORKING_NAMESPACE;
@@ -22,7 +23,20 @@ import static org.awaitility.Awaitility.await;
 class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
 
   @Test
-  void should_find_handler_to_create_task() {
+  void should_fail_when_llm_definition_is_not_found() {
+    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
+
+    await().pollInterval(1, TimeUnit.SECONDS)
+           .atMost(3, TimeUnit.SECONDS)
+           .until(() -> getTaskObject(LLMTaskReconcilerTest::extractState) == State.FAILED);
+
+    final var errorMessage = getTaskObject(LLMTaskReconcilerTest::extractErrorReason);
+    assertThat(errorMessage).isEqualTo("Could not find LLM definition of 'local-model'");
+  }
+
+  @Test
+  void should_correctly_manage_states() {
+    kubernetesClient.resource(LLM_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
     kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
 
     await().pollInterval(1, TimeUnit.SECONDS)
@@ -64,20 +78,26 @@ class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
   }
 
   private <T> T getTaskObject(final Function<GenericKubernetesResource, T> extractor) {
-    return kubernetesClient.genericKubernetesResources(LLM_TASK_APIVERSION, LLM_TASK_KIND)
+    return kubernetesClient.genericKubernetesResources(LLMTaskResource.APIVERSION,
+                               LLMTaskResource.KIND)
                            .inNamespace(WORKING_NAMESPACE)
                            .list()
                            .getItems()
                            .stream()
                            .findFirst()
                            .map(extractor)
-                           .orElseThrow();
+                           .orElse(null);
   }
 
   private static LLMTaskStatus.State extractState(final GenericKubernetesResource resource) {
     final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
     final var state = (String) statusMap.get("state");
-    return LLMTaskStatus.State.valueOf(state);
+    return state != null ? LLMTaskStatus.State.valueOf(state) : null;
+  }
+
+  private static String extractErrorReason(final GenericKubernetesResource resource) {
+    final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
+    return (String) statusMap.get("errorReason");
   }
 
   private List<Pod> podsInNamespace(final String namespace) {
