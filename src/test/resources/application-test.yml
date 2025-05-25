@@ -2,4 +2,4 @@ javaoperatorsdk:
   reconcilers:
     llmtaskreconciler:
       namespaces:
-        - default
+        - llm-tasks-ns
