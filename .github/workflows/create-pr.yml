@@ -4,7 +4,7 @@ on: create
 jobs:
   common-create-pr:
     if: ${{ github.actor != 'dependabot[bot]' }}
-    uses: unknorg/common-workflows/.github/workflows/create-pr.gen.yml@generated/configurable-runner-name
+    uses: unknorg/common-workflows/.github/workflows/create-pr.gen.yml@v0.7.0
     with:
       runner: ubuntu-latest
     secrets:
