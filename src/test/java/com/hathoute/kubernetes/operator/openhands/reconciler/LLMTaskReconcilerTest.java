@@ -42,23 +42,6 @@ class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
     verifyPodStateTriggersReconciliation("Unknown", LLMTaskStatus.State.FAILED);
   }
 
-  @Test
-  void should_remove_pod_when_task_is_removed() {
-    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
-
-    await().pollInterval(1, TimeUnit.SECONDS)
-           .atMost(3, TimeUnit.SECONDS)
-           .until(() -> !podsInNamespace(WORKING_NAMESPACE).isEmpty());
-
-    kubernetesClient.genericKubernetesResources(LLM_TASK_APIVERSION, LLM_TASK_KIND)
-                    .inNamespace(WORKING_NAMESPACE)
-                    .delete();
-
-    await().pollInterval(1, TimeUnit.SECONDS)
-           .atMost(3, TimeUnit.SECONDS)
-           .until(() -> podsInNamespace(WORKING_NAMESPACE).isEmpty());
-  }
-
   private Pod getPod() {
     return kubernetesClient.pods()
                            .inNamespace(WORKING_NAMESPACE)

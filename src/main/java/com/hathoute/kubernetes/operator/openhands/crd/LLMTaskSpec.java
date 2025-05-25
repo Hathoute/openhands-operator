@@ -6,7 +6,11 @@ import lombok.Data;
 @Data
 public class LLMTaskSpec {
   private LLMSpec llm;
+
+  private String preScript;
+  private String postScript;
   private String prompt;
+
   private PodSpec podSpec;
 
   @Data
