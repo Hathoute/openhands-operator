@@ -19,7 +19,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <java-operator.version>6.0.1</java-operator.version>
-    <fabric.version>7.1.0</fabric.version>
+    <fabric.version>7.3.1</fabric.version>
   </properties>
 
   <dependencies>
