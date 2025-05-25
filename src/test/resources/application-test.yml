@@ -1,0 +1,5 @@
+javaoperatorsdk:
+  reconcilers:
+    llmtaskreconciler:
+      namespaces:
+        - default

@@ -6,7 +6,10 @@ import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.NamespaceBuilder;
+import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +35,20 @@ class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
 
     final var errorMessage = getTaskObject(LLMTaskReconcilerTest::extractErrorReason);
     assertThat(errorMessage).isEqualTo("Could not find LLM definition of 'local-model'");
+  }
+
+  @Test
+  void should_not_reconcile_tasks_from_unwatched_namespaces() {
+    final var otherNamespace = "unwatched";
+    final var namespace = new NamespaceBuilder().withMetadata(
+        new ObjectMetaBuilder().withName(otherNamespace).build()).build();
+    kubernetesClient.namespaces().resource(namespace).create();
+    kubernetesClient.resource(LLM_RESOURCE).inNamespace(otherNamespace).create();
+    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(otherNamespace).create();
+
+    TestUtil.waitFor(1, ChronoUnit.SECONDS);
+    assertThat(getTaskObject(LLMTaskReconcilerTest::extractState)).isNull();
+    assertThat(podsInNamespace(otherNamespace)).isEmpty();
   }
 
   @Test

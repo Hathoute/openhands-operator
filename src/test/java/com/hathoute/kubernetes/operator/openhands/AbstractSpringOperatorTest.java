@@ -8,10 +8,12 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(classes = {OperatorSpringApplication.class, TestConfig.class})
+@ActiveProfiles("test")
 @EnableMockOperator(crdPaths = {
     "classpath:META-INF/fabric8/llmtasks.com.hathoute.kubernetes-v1.yml",
     "classpath:META-INF/fabric8/llms.com.hathoute.kubernetes-v1.yml"})

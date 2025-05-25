@@ -1,0 +1,4 @@
+javaoperatorsdk:
+  reconcilers:
+    llmtaskreconciler:
+#     namespaces: ${JAVAOPERATORSDK_RECONCILERS_LLMTASKRECONCILER_idx}
