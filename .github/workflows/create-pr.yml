@@ -1,0 +1,11 @@
+name: Create Pull Request
+on: create
+
+jobs:
+  common-create-pr:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    uses: unknorg/common-workflows/.github/workflows/create-pr.gen.yml@generated/configurable-runner-name
+    with:
+      runner: ubuntu-latest
+    secrets:
+      GITHUB_PAT: ${{ secrets.COMMON_PAT }}

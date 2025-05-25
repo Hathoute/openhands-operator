@@ -1,0 +1,36 @@
+{{- if .Values.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "openhandsOperator.fullname" . }}-writer
+  labels:
+    {{- include "openhandsOperator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [ "apiextensions.k8s.io" ]
+    resources: [ "customresourcedefinitions" ]
+    verbs: [ "get", "watch", "list" ]
+  - apiGroups: [ "com.hathoute.kubernetes" ]
+    resources: [ "*" ]
+    verbs: [ "*" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "*" ]
+{{- if .Values.serviceAccount.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "openhandsOperator.fullname" . }}
+  labels:
+    {{- include "openhandsOperator.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    namespace: {{ .Release.Namespace }}
+    name: {{ include "openhandsOperator.fullname" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "openhandsOperator.fullname" . }}-writer
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

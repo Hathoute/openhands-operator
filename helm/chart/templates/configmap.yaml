@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openhandsOperator.fullname" . }}
+  labels:
+    {{- include "openhandsOperator.labels" . | nindent 4 }}
+data:
+  {{- range $idx, $val := .Values.operator.watchNamespaces }}
+  JAVAOPERATORSDK_RECONCILERS_LLMTASKRECONCILER_{{ $idx }}: "{{ $val }}"
+  {{- end }}

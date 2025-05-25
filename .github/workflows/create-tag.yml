@@ -1,0 +1,13 @@
+name: Create Tag
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  common-create-tag:
+    uses: unknorg/common-workflows/.github/workflows/create-tag.gen.yml@generated/configurable-runner-name
+    with:
+      runner: ubuntu-latest
+    secrets:
+      GITHUB_PAT: ${{ secrets.COMMON_PAT }}
