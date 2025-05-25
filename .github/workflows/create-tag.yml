@@ -6,7 +6,7 @@ on:
 
 jobs:
   common-create-tag:
-    uses: unknorg/common-workflows/.github/workflows/create-tag.gen.yml@generated/configurable-runner-name
+    uses: unknorg/common-workflows/.github/workflows/create-tag.gen.yml@v0.7.0
     with:
       runner: ubuntu-latest
     secrets:
