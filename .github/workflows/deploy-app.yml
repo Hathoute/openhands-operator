@@ -22,7 +22,7 @@ jobs:
       contents: read
       pull-requests: write
     needs: [ prevent-dependabot ]
-    uses: unknorg/common-workflows/.github/workflows/build-java-docker.gen.yml@v0.7.0
+    uses: unknorg/common-workflows/.github/workflows/build-java-docker.gen.yml@generated/add-workflow-outputs
     with:
       runner: ubuntu-latest
       jdk-version: 21
@@ -43,3 +43,43 @@ jobs:
       ARTIFACT_REPO_USER: ${{ secrets.NEXUS_CI_ADMIN_USER }}
       ARTIFACT_REPO_PASSWORD: ${{ secrets.NEXUS_CI_ADMIN_PASSWORD }}
       SONARQUBE_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+
+  copy-docker-helm:
+    runs-on: ubuntu-latest
+    needs: [ common-build-java ]
+    steps:
+      - uses: azure/setup-helm@v3
+        with:
+          version: 'v3.11.1'
+      - name: Register repositories
+        run: |
+          echo "${{ secrets.ADDITIONAL_DOCKER_REPOS }}" | while read line
+          do
+            IFS=';' read -r -a array <<< "$line"
+            docker login ${array[0]} -u ${array[1]} -p ${array[2]}
+          done
+          helm registry login -u ${{ secrets.NEXUS_CI_ADMIN_USER }} -p ${{ secrets.NEXUS_CI_ADMIN_PASSWORD }} ${{ vars.NEXUS_HELM_REGISTRY }}
+          
+          docker login ghcr.io -u ${{ github.repository }} -p ${{ secrets.GHCR_PAT }}
+          helm registry login -u ${{ github.repository }} -p ${{ secrets.GHCR_PAT }} ghcr.io
+      - name: Pull, retag and push docker image
+        id: copy-docker
+        run: |
+          previousImage="${{ needs.common-build-java.outputs.docker-image }}:${{ needs.common-build-java.outputs.docker-image-tag }}"
+          newImage="ghcr.io/${{ github.repository }}"
+          newImageWithTag="${newImage@L}:${{ needs.common-build-java.outputs.docker-image-tag }}"
+          docker pull $previousImage
+          docker tag $previousImage $newImageWithTag
+          docker push $newImageWithTag
+          echo "new_docker_image=${newImage@L}" >> $GITHUB_OUTPUT
+      - name: Pull, retag and push helm
+        run: |
+          chartName=${{ needs.common-build-java.outputs.helm-chart-name }}
+          previousChart="${{ needs.common-build-java.outputs.helm-chart-repository }}/$chartName"
+          releaseVersion="${{ needs.common-build-java.outputs.helm-chart-version }}"
+          newChart="oci://ghcr.io/${{ github.repository_owner }}/charts"
+          
+          helm pull $previousChart --version $releaseVersion --untar
+          yq eval --inplace ".image.name = \"${{ steps.copy-docker.outputs.new_docker_image }}\"" "$chartName/values.yaml"
+          helm package $chartName
+          helm push $chartName-$releaseVersion.tgz ${newChart@L}
