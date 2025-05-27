@@ -33,6 +33,8 @@ class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
            .atMost(3, TimeUnit.SECONDS)
            .until(() -> getTaskObject(LLMTaskReconcilerTest::extractState) == State.FAILED);
 
+    assertThat(podsInNamespace(WORKING_NAMESPACE)).isEmpty();
+    
     final var errorMessage = getTaskObject(LLMTaskReconcilerTest::extractErrorReason);
     assertThat(errorMessage).isEqualTo("Could not find LLM definition of 'local-model'");
   }

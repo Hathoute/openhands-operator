@@ -20,7 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-@Workflow(dependents = {@Dependent(type = LLMTaskPodResource.class)})
+@Workflow(dependents = {@Dependent(type = LLMTaskPodResource.class)}, explicitInvocation = true)
 @ControllerConfiguration
 @Component
 public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<LLMTaskResource> {
@@ -32,10 +32,14 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
   public UpdateControl<LLMTaskResource> reconcile(final LLMTaskResource resource,
       final Context<LLMTaskResource> context) {
     LOGGER.info("Reconciling LLMTask {}", resource.getMetadata().getName());
-    final var patchOpt = validateModelExists(resource, context);
-    if (patchOpt.isPresent()) {
-      return patchOpt.get();
+    final var failureOpt = validateModelExists(resource, context);
+    if (failureOpt.isPresent()) {
+      // Model does not exist
+      return failureOpt.get();
     }
+
+    // Model exists, reconcile dependent resources before we continue.
+    context.managedWorkflowAndDependentResourceContext().reconcileManagedWorkflow();
 
     final var podResource = context.getSecondaryResource(Pod.class).orElseThrow();
 
@@ -104,6 +108,8 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
   @Override
   public DeleteControl cleanup(final LLMTaskResource resource,
       final Context<LLMTaskResource> context) {
+    // We need to explicitely cleanup since "explicitInvocation = true"
+    context.managedWorkflowAndDependentResourceContext().cleanupManageWorkflow();
     return DeleteControl.defaultDelete();
   }
 }
