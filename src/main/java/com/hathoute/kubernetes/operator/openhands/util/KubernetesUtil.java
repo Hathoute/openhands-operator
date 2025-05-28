@@ -43,8 +43,4 @@ public final class KubernetesUtil {
           "Could not convert GenericKubernetesResource to '%s'".formatted(type.getName()), e);
     }
   }
-
-  public static String apiGroup(final String apiVersion) {
-    return apiVersion.substring(0, apiVersion.lastIndexOf('/'));
-  }
 }

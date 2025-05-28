@@ -36,7 +36,7 @@ public class LLMTaskServiceAccountResource extends
                                       .build();
   }
 
-  private static String resourceName(final String primaryName) {
+  public static String resourceName(final String primaryName) {
     return "llmtask-%s".formatted(primaryName);
   }
 }

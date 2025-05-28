@@ -22,9 +22,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Workflow(dependents = {
-    @Dependent(type = LLMTaskRoleResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
-    @Dependent(type = LLMTaskServiceAccountResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
-    @Dependent(type = LLMTaskRoleBindingResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
+    @Dependent(name = "llmtaskrole", type = LLMTaskRoleResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
+    @Dependent(name = "llmtaskserviceaccount", type = LLMTaskServiceAccountResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
+    @Dependent(type = LLMTaskRoleBindingResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class, dependsOn = {
+        "llmtaskrole", "llmtaskserviceaccount"}),
     @Dependent(type = LLMTaskPodResource.class)}, explicitInvocation = true, handleExceptionsInReconciler = true)
 @ControllerConfiguration
 @Component

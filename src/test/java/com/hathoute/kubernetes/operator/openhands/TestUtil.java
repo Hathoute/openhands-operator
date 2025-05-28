@@ -1,10 +1,13 @@
 package com.hathoute.kubernetes.operator.openhands;
 
+import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import java.time.Duration;
 import java.time.temporal.TemporalUnit;
+import java.util.Map;
 
 public final class TestUtil {
 
@@ -25,5 +28,16 @@ public final class TestUtil {
     } catch (final InterruptedException e) {
       Thread.currentThread().interrupt();
     }
+  }
+
+  public static LLMTaskStatus.State extractState(final GenericKubernetesResource resource) {
+    final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
+    final var state = (String) statusMap.get("state");
+    return state != null ? LLMTaskStatus.State.valueOf(state) : null;
+  }
+
+  public static String extractErrorReason(final GenericKubernetesResource resource) {
+    final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
+    return (String) statusMap.get("errorReason");
   }
 }

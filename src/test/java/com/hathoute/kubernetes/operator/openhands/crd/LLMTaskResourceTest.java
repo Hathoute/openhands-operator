@@ -1,37 +1,42 @@
 package com.hathoute.kubernetes.operator.openhands.crd;
 
-import com.hathoute.kubernetes.operator.openhands.AbstractSpringOperatorTest;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.hathoute.kubernetes.operator.openhands.TestFixtures;
 import org.junit.jupiter.api.Test;
 
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_RESOURCE;
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.WORKING_NAMESPACE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 
-class LLMTaskResourceTest extends AbstractSpringOperatorTest {
+class LLMTaskResourceTest {
+
+  private static final ObjectMapper MAPPER = new ObjectMapper(
+      new YAMLFactory()).setSerializationInclusion(Include.NON_NULL);
 
   @Test
-  void should_find_handler_to_create_task() {
-    final var createdObject = kubernetesClient.resource(LLM_TASK_RESOURCE)
-                                              .inNamespace(WORKING_NAMESPACE)
-                                              .create();
+  void should_use_correct_llmtask_resource() throws JsonProcessingException {
+    // Test that the LLMTask used in TestFixtures is valid
+    final var nodes = MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE, Object.class);
 
-    assertThat(createdObject.getKind()).isEqualTo("LLMTask");
+    final var llmTask = MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE, LLMTaskResource.class);
+    // non-mapped nodes are lost in this convertion
+    final var serialized = MAPPER.writeValueAsString(llmTask);
+    final var actual = MAPPER.readValue(serialized, Object.class);
 
-    final var actualMetadata = createdObject.getMetadata();
-    assertThat(actualMetadata).isNotNull();
-    assertThat(actualMetadata.getName()).isEqualTo("fix-issue-1234");
-    assertThat(actualMetadata.getNamespace()).isEqualTo(WORKING_NAMESPACE);
+    assertThat(actual).isEqualTo(nodes);
+  }
 
-    final var actualObjectList = kubernetesClient.genericKubernetesResources(
-        "com.hathoute.kubernetes/v1alpha1", "LLMTask").inNamespace(WORKING_NAMESPACE).list();
-    assertThat(actualObjectList.getItems()).hasSize(1);
-    final var actualObject = actualObjectList.getItems().getFirst();
+  @Test
+  void should_use_correct_llm_resource() throws JsonProcessingException {
+    // Test that the LLM used in TestFixtures is valid
+    final var nodes = MAPPER.readValue(TestFixtures.LLM_RESOURCE, Object.class);
 
-    assertThat(actualObject.getAdditionalProperties()).containsKey("spec");
-    final var objectSpec = actualObject.getAdditionalProperties().get("spec");
+    final var llm = MAPPER.readValue(TestFixtures.LLM_RESOURCE, LLMResource.class);
+    // non-mapped nodes are lost in this convertion
+    final var serialized = MAPPER.writeValueAsString(llm);
+    final var actual = MAPPER.readValue(serialized, Object.class);
 
-    assertThat(objectSpec).asInstanceOf(MAP)
-                          .containsEntry("prompt", "This is the prompt for the task");
+    assertThat(actual).isEqualTo(nodes);
   }
 }

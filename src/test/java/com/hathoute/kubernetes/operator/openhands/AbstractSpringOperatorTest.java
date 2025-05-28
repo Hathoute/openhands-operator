@@ -2,14 +2,17 @@ package com.hathoute.kubernetes.operator.openhands;
 
 import com.hathoute.kubernetes.operator.openhands.crd.LLMResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.springboot.starter.test.EnableMockOperator;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import static com.hathoute.kubernetes.operator.openhands.TestFixtures.WORKING_NAMESPACE;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(classes = {OperatorSpringApplication.class, TestConfig.class})
@@ -35,5 +38,17 @@ public abstract class AbstractSpringOperatorTest {
     await().atMost(5, TimeUnit.SECONDS)
            .until(() -> kubernetesClient.genericKubernetesResources(LLMResource.APIVERSION,
                LLMResource.KIND).list().getItems().isEmpty());
+  }
+
+  protected List<Pod> podsInNamespace(final String namespace) {
+    return kubernetesClient.pods().inNamespace(namespace).list().getItems();
+  }
+
+  protected Pod getPod() {
+    final var pods = podsInNamespace(WORKING_NAMESPACE);
+    if (pods.size() != 1) {
+      throw new IllegalStateException("Expecting 1 pod, found " + pods.size());
+    }
+    return pods.getFirst();
   }
 }
