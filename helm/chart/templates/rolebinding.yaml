@@ -14,7 +14,10 @@ rules:
     resources: [ "*" ]
     verbs: [ "*" ]
   - apiGroups: [ "" ]
-    resources: [ "pods" ]
+    resources: [ "pods", "serviceaccounts" ]
+    verbs: [ "*" ]
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "roles", "rolebindings" ]
     verbs: [ "*" ]
 {{- if .Values.serviceAccount.create }}
 ---
