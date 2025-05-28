@@ -1,123 +1,156 @@
 package com.hathoute.kubernetes.operator.openhands.reconciler;
 
-import com.hathoute.kubernetes.operator.openhands.AbstractSpringOperatorTest;
-import com.hathoute.kubernetes.operator.openhands.TestUtil;
+import com.hathoute.kubernetes.operator.openhands.TestFixtures;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
-import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State;
-import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
-import io.fabric8.kubernetes.api.model.NamespaceBuilder;
-import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import io.fabric8.kubernetes.api.model.PodStatus;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedWorkflowAndDependentResourceContext;
+import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_RESOURCE;
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_NAME;
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.LLM_TASK_RESOURCE;
-import static com.hathoute.kubernetes.operator.openhands.TestFixtures.WORKING_NAMESPACE;
+import static com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State.FAILED;
+import static com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State.QUEUED;
+import static com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State.RUNNING;
+import static com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State.SUCCEEDED;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
-class LLMTaskReconcilerTest extends AbstractSpringOperatorTest {
+class LLMTaskReconcilerTest {
 
-  @Test
-  void should_fail_when_llm_definition_is_not_found() {
-    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
+  private PrimaryResourceValidator<LLMTaskResource> validator;
+  private Context<LLMTaskResource> context;
+  private ManagedWorkflowAndDependentResourceContext managedWorkflowAndDependentResourceContext;
+  private LLMTaskReconciler reconciler;
 
-    await().pollInterval(1, TimeUnit.SECONDS)
-           .atMost(3, TimeUnit.SECONDS)
-           .until(() -> getTaskObject(LLMTaskReconcilerTest::extractState) == State.FAILED);
+  @BeforeEach
+  void setup() {
+    validator = mock(PrimaryResourceValidator.class);
+    managedWorkflowAndDependentResourceContext = mock(
+        ManagedWorkflowAndDependentResourceContext.class);
+    context = mock(Context.class);
+    when(context.managedWorkflowAndDependentResourceContext()).thenReturn(
+        managedWorkflowAndDependentResourceContext);
+    reconciler = new LLMTaskReconciler(validator);
+  }
 
-    final var errorMessage = getTaskObject(LLMTaskReconcilerTest::extractErrorReason);
-    assertThat(errorMessage).isEqualTo("Could not find LLM definition of 'local-model'");
+  @AfterEach
+  void teardown() {
+    verifyNoMoreInteractions(context);
+    verifyNoMoreInteractions(managedWorkflowAndDependentResourceContext);
   }
 
   @Test
-  void should_not_reconcile_tasks_from_unwatched_namespaces() {
-    final var otherNamespace = "unwatched";
-    final var namespace = new NamespaceBuilder().withMetadata(
-        new ObjectMetaBuilder().withName(otherNamespace).build()).build();
-    kubernetesClient.namespaces().resource(namespace).create();
-    kubernetesClient.resource(LLM_RESOURCE).inNamespace(otherNamespace).create();
-    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(otherNamespace).create();
+  void should_patch_status_when_validation_fails() throws Exception {
+    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+        LLMTaskResource.class);
+    final var failed = new LLMTaskResource();
+    final var status = new LLMTaskStatus();
+    status.setState(FAILED);
+    status.setErrorReason("Validation failed");
+    failed.setStatus(status);
+    when(validator.validateOrErrorStatus(any(), any())).thenReturn(Optional.of(failed));
 
-    TestUtil.waitFor(1, ChronoUnit.SECONDS);
-    assertThat(getTaskObject(LLMTaskReconcilerTest::extractState)).isNull();
-    assertThat(podsInNamespace(otherNamespace)).isEmpty();
+    final var result = reconciler.reconcile(input, context);
+
+    assertStatus(result, status);
   }
 
   @Test
-  void should_correctly_manage_states() {
-    kubernetesClient.resource(LLM_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
-    kubernetesClient.resource(LLM_TASK_RESOURCE).inNamespace(WORKING_NAMESPACE).create();
+  void should_return_no_update_if_state_did_not_change() throws Exception {
+    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+        LLMTaskResource.class);
+    final var existingStatus = new LLMTaskStatus();
+    existingStatus.setState(RUNNING);
+    input.setStatus(existingStatus);
 
-    await().pollInterval(1, TimeUnit.SECONDS)
-           .atMost(3, TimeUnit.SECONDS)
-           .until(() -> !podsInNamespace(WORKING_NAMESPACE).isEmpty());
+    final var pod = new Pod();
+    final var podStatus = new PodStatus();
+    podStatus.setPhase("Running");
+    pod.setStatus(podStatus);
 
-    final var pods = podsInNamespace(WORKING_NAMESPACE);
-    assertThat(pods).hasSize(1);
-    final var pod = pods.getFirst();
-    assertThat(pod.getMetadata().getName()).isEqualTo("llm-task-" + LLM_TASK_NAME);
+    when(validator.validateOrErrorStatus(any(), any())).thenReturn(Optional.empty());
+    when(context.getSecondaryResource(Pod.class)).thenReturn(Optional.of(pod));
 
-    // Simulate pod phases
-    verifyPodStateTriggersReconciliation("Pending", LLMTaskStatus.State.QUEUED);
-    verifyPodStateTriggersReconciliation("Running", LLMTaskStatus.State.RUNNING);
-    verifyPodStateTriggersReconciliation("Succeeded", LLMTaskStatus.State.SUCCEEDED);
-    verifyPodStateTriggersReconciliation("Failed", LLMTaskStatus.State.FAILED);
-    verifyPodStateTriggersReconciliation("Unknown", LLMTaskStatus.State.FAILED);
+    final var result = reconciler.reconcile(input, context);
+
+    assertThat(result.isNoUpdate()).isTrue();
+    verify(context).getSecondaryResource(Pod.class);
+    verify(context).managedWorkflowAndDependentResourceContext();
+    verify(managedWorkflowAndDependentResourceContext).reconcileManagedWorkflow();
   }
 
-  private Pod getPod() {
-    return kubernetesClient.pods()
-                           .inNamespace(WORKING_NAMESPACE)
-                           .list()
-                           .getItems()
-                           .stream()
-                           .findFirst()
-                           .orElseThrow(() -> new IllegalStateException("Could not find pod"));
+  @Test
+  void should_patch_status_when_pod_state_changes() throws Exception {
+    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+        LLMTaskResource.class);
+    final var oldStatus = new LLMTaskStatus();
+    oldStatus.setState(QUEUED);
+    input.setStatus(oldStatus);
+
+    final var pod = new Pod();
+    final var podStatus = new PodStatus();
+    podStatus.setPhase("Succeeded");
+    pod.setStatus(podStatus);
+
+    when(validator.validateOrErrorStatus(any(), any())).thenReturn(Optional.empty());
+    when(context.getSecondaryResource(Pod.class)).thenReturn(Optional.of(pod));
+
+    final var result = reconciler.reconcile(input, context);
+
+    verify(context).getSecondaryResource(Pod.class);
+    verify(context).managedWorkflowAndDependentResourceContext();
+    verify(managedWorkflowAndDependentResourceContext).reconcileManagedWorkflow();
+
+    final var expectedStatus = new LLMTaskStatus();
+    expectedStatus.setState(SUCCEEDED);
+    assertStatus(result, expectedStatus);
+
   }
 
-  private void verifyPodStateTriggersReconciliation(final String podPhase,
-      final LLMTaskStatus.State state) {
-    // Get the latest state of the Pod
-    final var pod = getPod();
+  @Test
+  void should_return_queued_if_pod_has_no_status() throws Exception {
+    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+        LLMTaskResource.class);
+    final var pod = new Pod(); // no status set
 
-    TestUtil.setPodState(kubernetesClient, pod, podPhase);
-    await().pollInterval(500, TimeUnit.MILLISECONDS)
-           .atMost(2, TimeUnit.SECONDS)
-           .until(() -> state == getTaskObject(LLMTaskReconcilerTest::extractState));
+    when(validator.validateOrErrorStatus(any(), any())).thenReturn(Optional.empty());
+    when(context.getSecondaryResource(Pod.class)).thenReturn(Optional.of(pod));
+
+    final var result = reconciler.reconcile(input, context);
+
+    verify(context).getSecondaryResource(Pod.class);
+    verify(context).managedWorkflowAndDependentResourceContext();
+    verify(managedWorkflowAndDependentResourceContext).reconcileManagedWorkflow();
+
+    final var expectedStatus = new LLMTaskStatus();
+    expectedStatus.setState(QUEUED);
+    assertStatus(result, expectedStatus);
   }
 
-  private <T> T getTaskObject(final Function<GenericKubernetesResource, T> extractor) {
-    return kubernetesClient.genericKubernetesResources(LLMTaskResource.APIVERSION,
-                               LLMTaskResource.KIND)
-                           .inNamespace(WORKING_NAMESPACE)
-                           .list()
-                           .getItems()
-                           .stream()
-                           .findFirst()
-                           .map(extractor)
-                           .orElse(null);
+  @Test
+  void cleanup_should_invoke_workflow_cleanup() {
+    final var input = new LLMTaskResource();
+    final var result = reconciler.cleanup(input, context);
+
+    verify(context).managedWorkflowAndDependentResourceContext();
+    verify(managedWorkflowAndDependentResourceContext).cleanupManageWorkflow();
+    assertThat(result.isRemoveFinalizer()).isTrue();
   }
 
-  private static LLMTaskStatus.State extractState(final GenericKubernetesResource resource) {
-    final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
-    final var state = (String) statusMap.get("state");
-    return state != null ? LLMTaskStatus.State.valueOf(state) : null;
-  }
-
-  private static String extractErrorReason(final GenericKubernetesResource resource) {
-    final var statusMap = (Map<String, Object>) resource.getAdditionalProperties().get("status");
-    return (String) statusMap.get("errorReason");
-  }
-
-  private List<Pod> podsInNamespace(final String namespace) {
-    return kubernetesClient.pods().inNamespace(namespace).list().getItems();
+  private static void assertStatus(final UpdateControl<LLMTaskResource> result,
+      final LLMTaskStatus status) {
+    assertThat(result.isPatchStatus()).isTrue();
+    assertThat(result.getResource()).isNotEmpty();
+    final var actualStatus = result.getResource().get().getStatus();
+    assertThat(actualStatus).usingRecursiveComparison().isEqualTo(status);
   }
 }

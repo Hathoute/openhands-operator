@@ -23,7 +23,7 @@ public final class KubernetesUtil {
         LLMResource.class);
   }
 
-  public static <T extends HasMetadata & Namespaced> T getNamespacedObject(
+  private static <T extends HasMetadata & Namespaced> T getNamespacedObject(
       final KubernetesClient client, final String apiVersion, final String kind,
       final String namespace, final String name, final Class<T> type) {
     final var item = client.genericKubernetesResources(apiVersion, kind)

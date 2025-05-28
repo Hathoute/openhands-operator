@@ -2,9 +2,10 @@ package com.hathoute.kubernetes.operator.openhands.reconciler;
 
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
-import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus.State;
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskPodResource;
-import com.hathoute.kubernetes.operator.openhands.util.KubernetesUtil;
+import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskRoleBindingResource;
+import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskRoleResource;
+import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskServiceAccountResource;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
@@ -15,27 +16,44 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
-import java.util.Optional;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-@Workflow(dependents = {@Dependent(type = LLMTaskPodResource.class)})
+@Workflow(dependents = {
+    @Dependent(name = "llmtaskrole", type = LLMTaskRoleResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
+    @Dependent(name = "llmtaskserviceaccount", type = LLMTaskServiceAccountResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
+    @Dependent(type = LLMTaskRoleBindingResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class, dependsOn = {
+        "llmtaskrole", "llmtaskserviceaccount"}),
+    @Dependent(type = LLMTaskPodResource.class)}, explicitInvocation = true, handleExceptionsInReconciler = true)
 @ControllerConfiguration
 @Component
 public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<LLMTaskResource> {
   private static final Logger LOGGER = LoggerFactory.getLogger(LLMTaskReconciler.class);
 
   public static final String SELECTOR = "app.kubernetes.io/managed-by=openhands-operator";
+  public static final Map<String, String> SELECTOR_LABEL = Map.of("app.kubernetes.io/managed-by",
+      "openhands-operator");
+
+  private final PrimaryResourceValidator<LLMTaskResource> llmTaskValidator;
+
+  public LLMTaskReconciler(final PrimaryResourceValidator<LLMTaskResource> llmTaskValidator) {
+    this.llmTaskValidator = llmTaskValidator;
+  }
 
   @Override
   public UpdateControl<LLMTaskResource> reconcile(final LLMTaskResource resource,
       final Context<LLMTaskResource> context) {
     LOGGER.info("Reconciling LLMTask {}", resource.getMetadata().getName());
-    final var patchOpt = validateModelExists(resource, context);
-    if (patchOpt.isPresent()) {
-      return patchOpt.get();
+    final var failureOpt = llmTaskValidator.validateOrErrorStatus(resource, context);
+    if (failureOpt.isPresent()) {
+      // Model does not exist
+      return UpdateControl.patchStatus(failureOpt.get());
     }
+
+    // Model exists, reconcile dependent resources before we continue.
+    context.managedWorkflowAndDependentResourceContext().reconcileManagedWorkflow();
 
     final var podResource = context.getSecondaryResource(Pod.class).orElseThrow();
 
@@ -62,26 +80,6 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
     return UpdateControl.patchStatus(patched);
   }
 
-  private Optional<UpdateControl<LLMTaskResource>> validateModelExists(
-      final LLMTaskResource resource, final Context<LLMTaskResource> context) {
-    final var llm = KubernetesUtil.getModelForTask(context.getClient(), resource);
-    if (llm != null) {
-      return Optional.empty();
-    }
-
-    LOGGER.warn("Could not find LLM definition of '{}' needed by Task {}",
-        resource.getSpec().getLlmName(), resource.getMetadata().getName());
-
-    final var patched = new LLMTaskResource();
-    patched.setMetadata(resource.getMetadata());
-    final var status = new LLMTaskStatus();
-    status.setState(State.FAILED);
-    status.setErrorReason(
-        "Could not find LLM definition of '%s'".formatted(resource.getSpec().getLlmName()));
-    patched.setStatus(status);
-    return Optional.of(UpdateControl.patchStatus(patched));
-  }
-
   private static LLMTaskStatus.State fromTask(final LLMTaskResource task) {
     return task.getStatus() != null ? task.getStatus().getState() : null;
   }
@@ -104,6 +102,8 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
   @Override
   public DeleteControl cleanup(final LLMTaskResource resource,
       final Context<LLMTaskResource> context) {
+    // We need to explicitely cleanup since "explicitInvocation = true"
+    context.managedWorkflowAndDependentResourceContext().cleanupManageWorkflow();
     return DeleteControl.defaultDelete();
   }
 }
