@@ -22,7 +22,7 @@ jobs:
       contents: read
       pull-requests: write
     needs: [ prevent-dependabot ]
-    uses: unknorg/common-workflows/.github/workflows/build-java-docker.gen.yml@generated/add-workflow-outputs
+    uses: unknorg/common-workflows/.github/workflows/build-java-docker.gen.yml@v0.8.0
     with:
       runner: ubuntu-latest
       jdk-version: 21
