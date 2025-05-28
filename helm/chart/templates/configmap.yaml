@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "openhandsOperator.labels" . | nindent 4 }}
 data:
+  LOG_LEVEL: "{{ .Values.logLevel }}"
   {{- range $idx, $val := .Values.operator.watchNamespaces }}
   JAVAOPERATORSDK_RECONCILERS_LLMTASKRECONCILER_{{ $idx }}: "{{ $val }}"
   {{- end }}
