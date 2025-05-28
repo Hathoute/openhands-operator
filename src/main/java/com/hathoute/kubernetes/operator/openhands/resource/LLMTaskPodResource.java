@@ -3,6 +3,7 @@ package com.hathoute.kubernetes.operator.openhands.resource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMSpec;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskSpec;
+import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskSpec.LLMPod;
 import com.hathoute.kubernetes.operator.openhands.util.KubernetesUtil;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
@@ -16,11 +17,9 @@ import io.javaoperatorsdk.operator.api.config.informer.Informer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.CRUDKubernetesDependentResource;
 import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDependent;
-import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.lang.Nullable;
 
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_ADDITIONAL_ENV_VARS;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_CONTAINER_COMMAND;
@@ -33,7 +32,8 @@ import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PROMPT_ENV_VAR;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_RUNTIME_IMAGE;
 import static com.hathoute.kubernetes.operator.openhands.reconciler.LLMTaskReconciler.SELECTOR;
-import static java.util.Objects.requireNonNullElseGet;
+import static com.hathoute.kubernetes.operator.openhands.reconciler.LLMTaskReconciler.SELECTOR_LABEL;
+import static java.util.Optional.ofNullable;
 
 @KubernetesDependent(informer = @Informer(labelSelector = SELECTOR))
 public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLMTaskResource> {
@@ -65,14 +65,12 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
     final var meta = primary.getMetadata();
     return new ObjectMetaBuilder().withNamespace(meta.getNamespace())
                                   .withName(podName(meta.getName()))
-                                  .withLabels(
-                                      Map.of("app.kubernetes.io/managed-by", "openhands-operator"))
+                                  .withLabels(SELECTOR_LABEL)
                                   .build();
   }
 
-  private static PodSpec buildPodSpec(final LLMTaskSpec taskSpec,
-      final @Nullable LLMSpec modelSpec) {
-    final var podTemplate = requireNonNullElseGet(taskSpec.getPodSpec(), PodSpec::new);
+  private static PodSpec buildPodSpec(final LLMTaskSpec taskSpec, final LLMSpec modelSpec) {
+    final var podTemplate = getPodSpec(taskSpec);
     final var podBuilder = podTemplate.edit();
 
     final var containerOpt = podTemplate.getContainers()
@@ -89,16 +87,13 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
     return podBuilder.build();
   }
 
-  private static void buildContainer(final LLMTaskSpec taskSpec, final @Nullable LLMSpec modelSpec,
+  private static void buildContainer(final LLMTaskSpec taskSpec, final LLMSpec modelSpec,
       final ContainerBuilder containerBuilder) {
     containerBuilder.withName(OPENHANDS_CONTAINER_NAME);
 
-    if (modelSpec != null) {
-      addToEnv(containerBuilder, OPENHANDS_MODEL_NAME_ENV_VAR, modelSpec.getModelName());
-      addToEnv(containerBuilder, OPENHANDS_MODEL_APIKEY_ENV_VAR, modelSpec.getApiKey());
-      addToEnv(containerBuilder, OPENHANDS_MODEL_BASEURL_ENV_VAR, modelSpec.getBaseUrl());
-    }
-
+    addToEnv(containerBuilder, OPENHANDS_MODEL_NAME_ENV_VAR, modelSpec.getModelName());
+    addToEnv(containerBuilder, OPENHANDS_MODEL_APIKEY_ENV_VAR, modelSpec.getApiKey());
+    addToEnv(containerBuilder, OPENHANDS_MODEL_BASEURL_ENV_VAR, modelSpec.getBaseUrl());
     addToEnv(containerBuilder, OPENHANDS_PROMPT_ENV_VAR, taskSpec.getPrompt());
     OPENHANDS_ADDITIONAL_ENV_VARS.forEach((k, v) -> addToEnv(containerBuilder, k, v));
 
@@ -141,6 +136,10 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
     }
 
     return builder.toString();
+  }
+
+  private static PodSpec getPodSpec(final LLMTaskSpec taskSpec) {
+    return ofNullable(taskSpec.getPod()).map(LLMPod::getSpec).orElseGet(PodSpec::new);
   }
 
   private static String podName(final String taskName) {

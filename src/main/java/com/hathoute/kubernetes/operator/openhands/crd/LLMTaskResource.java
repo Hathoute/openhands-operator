@@ -19,4 +19,9 @@ public class LLMTaskResource extends CustomResource<LLMTaskSpec, LLMTaskStatus> 
   public static final String APIVERSION = "%s/%s".formatted(GROUP, VERSION);
   public static final String KIND = "LLMTask";
 
+  @Override
+  public String toString() {
+    final var meta = this.getMetadata();
+    return "LLMTaskResource(name=%s, namespace=%s)".formatted(meta.getName(), meta.getNamespace());
+  }
 }
