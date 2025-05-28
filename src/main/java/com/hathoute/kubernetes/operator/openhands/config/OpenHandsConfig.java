@@ -16,8 +16,9 @@ public class OpenHandsConfig {
   public static final String OPENHANDS_MODEL_BASEURL_ENV_VAR = "LLM_BASE_URL";
   public static final String OPENHANDS_PROMPT_ENV_VAR = "OPENHANDS_PROMPT";
 
-  public static final String OPENHANDS_PRESCRIPT_COMMAND = "IMAGE_WORKING_DIR=$(pwd) && cd /workspace";
-  public static final String OPENHANDS_CONTAINER_COMMAND = "cd $IMAGE_WORKING_DIR && poetry run python -m openhands.core.main -t \"$%s\"".formatted(
+  public static final String OPENHANDS_PRESCRIPT_BEFORE_COMMAND = "IMAGE_WORKING_DIR=$(pwd) && cd /workspace";
+  public static final String OPENHANDS_PRESCRIPT_AFTER_COMMAND = "cd $IMAGE_WORKING_DIR";
+  public static final String OPENHANDS_CONTAINER_COMMAND = "poetry run python -m openhands.core.main -t \"$%s\"".formatted(
       OPENHANDS_PROMPT_ENV_VAR);
   public static final String OPENHANDS_POSTSCRIPT_COMMAND = "cd /workspace";
 

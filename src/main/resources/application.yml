@@ -1,4 +1,4 @@
 logging:
   level:
-    io.javaoperatorsdk: ${LOG_LEVEL}
-    com.hathoute: ${LOG_LEVEL}
+    io.javaoperatorsdk: ${LOG_LEVEL:INFO}
+    com.hathoute: ${LOG_LEVEL:INFO}
