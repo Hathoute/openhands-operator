@@ -30,7 +30,8 @@ import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_MODEL_BASEURL_ENV_VAR;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_MODEL_NAME_ENV_VAR;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_POSTSCRIPT_COMMAND;
-import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PRESCRIPT_COMMAND;
+import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PRESCRIPT_AFTER_COMMAND;
+import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PRESCRIPT_BEFORE_COMMAND;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PROMPT_ENV_VAR;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_RUNTIME_IMAGE;
 import static com.hathoute.kubernetes.operator.openhands.reconciler.LLMTaskReconciler.SELECTOR;
@@ -145,9 +146,11 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
 
   private static String buildCommand(final LLMTaskSpec taskSpec) {
     final var builder = new StringBuilder();
+
     if (!StringUtils.isEmpty(taskSpec.getPreScript())) {
-      builder.append(OPENHANDS_PRESCRIPT_COMMAND).append("\n");
+      builder.append(OPENHANDS_PRESCRIPT_BEFORE_COMMAND).append("\n");
       builder.append(taskSpec.getPreScript()).append("\n");
+      builder.append(OPENHANDS_PRESCRIPT_AFTER_COMMAND).append("\n");
     }
 
     builder.append(OPENHANDS_CONTAINER_COMMAND).append("\n");

@@ -58,6 +58,8 @@ tolerations: []
 
 affinity: {}
 
+
+logLevel: INFO
 operator:
   # Namespaces to watch. (Leave empty for all namespaces)
   watchNamespaces: []

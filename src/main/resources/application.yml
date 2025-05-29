@@ -1,4 +1,4 @@
-javaoperatorsdk:
-  reconcilers:
-    llmtaskreconciler:
-#     namespaces: ${JAVAOPERATORSDK_RECONCILERS_LLMTASKRECONCILER_idx}
+logging:
+  level:
+    io.javaoperatorsdk: ${LOG_LEVEL:INFO}
+    com.hathoute: ${LOG_LEVEL:INFO}
