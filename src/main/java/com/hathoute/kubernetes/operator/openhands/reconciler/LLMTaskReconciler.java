@@ -2,31 +2,43 @@ package com.hathoute.kubernetes.operator.openhands.reconciler;
 
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskStatus;
+import com.hathoute.kubernetes.operator.openhands.reporter.TaskReportingRoutine.State;
+import com.hathoute.kubernetes.operator.openhands.reporter.TaskReportingService;
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskPodResource;
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskRoleBindingResource;
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskRoleResource;
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskServiceAccountResource;
+import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskServiceResource;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.javaoperatorsdk.operator.processing.event.source.inbound.SimpleInboundEventSource;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import static com.hathoute.kubernetes.operator.openhands.util.OpenHandsUtil.statusFromEvents;
+import static java.util.Optional.ofNullable;
 
 @Workflow(dependents = {
     @Dependent(name = "llmtaskrole", type = LLMTaskRoleResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
     @Dependent(name = "llmtaskserviceaccount", type = LLMTaskServiceAccountResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class),
     @Dependent(type = LLMTaskRoleBindingResource.class, reconcilePrecondition = LLMTaskWithServiceAccountCondition.class, dependsOn = {
         "llmtaskrole", "llmtaskserviceaccount"}),
-    @Dependent(type = LLMTaskPodResource.class)}, explicitInvocation = true, handleExceptionsInReconciler = true)
+    @Dependent(name = "llmtaskpod", type = LLMTaskPodResource.class),
+    @Dependent(type = LLMTaskServiceResource.class, dependsOn = "llmtaskpod")}, explicitInvocation = true, handleExceptionsInReconciler = true)
 @ControllerConfiguration
 @Component
 public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<LLMTaskResource> {
@@ -37,9 +49,21 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
       "openhands-operator");
 
   private final PrimaryResourceValidator<LLMTaskResource> llmTaskValidator;
+  private final TaskReportingService taskReportingService;
+  private final SimpleInboundEventSource<LLMTaskResource> reporterEventSource;
 
-  public LLMTaskReconciler(final PrimaryResourceValidator<LLMTaskResource> llmTaskValidator) {
+  public LLMTaskReconciler(final PrimaryResourceValidator<LLMTaskResource> llmTaskValidator,
+      final TaskReportingService taskReportingService,
+      final SimpleInboundEventSource<LLMTaskResource> reporterEventSource) {
     this.llmTaskValidator = llmTaskValidator;
+    this.taskReportingService = taskReportingService;
+    this.reporterEventSource = reporterEventSource;
+  }
+
+  @Override
+  public List<EventSource<?, LLMTaskResource>> prepareEventSources(
+      final EventSourceContext<LLMTaskResource> context) {
+    return List.of(reporterEventSource);
   }
 
   @Override
@@ -48,60 +72,71 @@ public class LLMTaskReconciler implements Reconciler<LLMTaskResource>, Cleaner<L
     LOGGER.info("Reconciling LLMTask {}", resource.getMetadata().getName());
     final var failureOpt = llmTaskValidator.validateOrErrorStatus(resource, context);
     if (failureOpt.isPresent()) {
-      // Model does not exist
+      // Did not pass the validation phase
       return UpdateControl.patchStatus(failureOpt.get());
     }
 
     // Model exists, reconcile dependent resources before we continue.
     context.managedWorkflowAndDependentResourceContext().reconcileManagedWorkflow();
 
-    final var podResource = context.getSecondaryResource(Pod.class).orElseThrow();
+    // Watch and report events
+    taskReportingService.addTask(resource);
 
-    final var previousState = fromTask(resource);
-    final var state = fromPod(podResource);
-    if (previousState == state) {
+    // Extract state from the Pod
+    final var podResource = context.getSecondaryResource(Pod.class).orElseThrow();
+    final var previousStatus = resource.getStatus();
+    final var status = fromRoutine(resource).orElseGet(() -> fromPod(podResource));
+    if (status.equals(previousStatus)) {
       LOGGER.debug("LLMTask {}: no state change detected (current={})",
-          resource.getMetadata().getName(), state);
+          resource.getMetadata().getName(), status);
       return UpdateControl.noUpdate();
     }
 
     LOGGER.info("Changing state of LLMTask {} from {} to {}", resource.getMetadata().getName(),
-        previousState, state);
+        previousStatus, status);
 
     final var patched = new LLMTaskResource();
     patched.setMetadata(new ObjectMetaBuilder().withName(resource.getMetadata().getName())
                                                .withNamespace(resource.getMetadata().getNamespace())
                                                .build());
-
-    final var status = new LLMTaskStatus();
-    status.setState(state);
     patched.setStatus(status);
-
     return UpdateControl.patchStatus(patched);
   }
 
-  private static LLMTaskStatus.State fromTask(final LLMTaskResource task) {
-    return task.getStatus() != null ? task.getStatus().getState() : null;
-  }
-
-  private static LLMTaskStatus.State fromPod(final Pod pod) {
-    final var status = pod.getStatus();
-    if (status == null) {
-      return LLMTaskStatus.State.QUEUED;
+  private static LLMTaskStatus fromPod(final Pod pod) {
+    final var podStatus = pod.getStatus();
+    final var status = new LLMTaskStatus();
+    if (podStatus == null) {
+      status.setState(LLMTaskStatus.State.QUEUED);
+      return status;
     }
 
-    return switch (status.getPhase()) {
+    final var state = switch (podStatus.getPhase()) {
       case "Pending" -> LLMTaskStatus.State.QUEUED;
       case "Running" -> LLMTaskStatus.State.RUNNING;
-      case "Failed", "Unknown" -> LLMTaskStatus.State.FAILED;
+      case "Failed", "Unknown" -> LLMTaskStatus.State.ERROR;
       case "Succeeded" -> LLMTaskStatus.State.SUCCEEDED;
-      case null, default -> throw new IllegalStateException("Unknown pod status: " + status);
+      case null, default -> throw new IllegalStateException("Unknown pod status: " + podStatus);
     };
+    status.setState(state);
+    return status;
+  }
+
+  private Optional<LLMTaskStatus> fromRoutine(final LLMTaskResource task) {
+    final var routine = taskReportingService.getRoutine(task);
+    if (routine.getCurrentState() != State.STOPPED) {
+      return Optional.empty();
+    }
+
+    final var events = routine.getEvents();
+    return ofNullable(statusFromEvents(events));
   }
 
   @Override
   public DeleteControl cleanup(final LLMTaskResource resource,
       final Context<LLMTaskResource> context) {
+    // Remove the task from
+    taskReportingService.removeTask(resource);
     // We need to explicitely cleanup since "explicitInvocation = true"
     context.managedWorkflowAndDependentResourceContext().cleanupManageWorkflow();
     return DeleteControl.defaultDelete();

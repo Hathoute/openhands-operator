@@ -33,7 +33,10 @@ import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PRESCRIPT_AFTER_COMMAND;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PRESCRIPT_BEFORE_COMMAND;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_PROMPT_ENV_VAR;
+import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_REPORTER_LISTEN_PORT_ENV_VAR;
 import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_RUNTIME_IMAGE;
+import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_RUNTIME_REPORTER_PORT;
+import static com.hathoute.kubernetes.operator.openhands.config.OpenHandsConfig.OPENHANDS_RUNTIME_REPORTER_PORT_NAME;
 import static com.hathoute.kubernetes.operator.openhands.reconciler.LLMTaskReconciler.SELECTOR;
 import static com.hathoute.kubernetes.operator.openhands.reconciler.LLMTaskReconciler.SELECTOR_LABEL;
 import static java.util.Optional.empty;
@@ -105,6 +108,8 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
     addToEnv(containerBuilder, OPENHANDS_MODEL_APIKEY_ENV_VAR, modelSpec.getApiKey());
     addToEnv(containerBuilder, OPENHANDS_MODEL_BASEURL_ENV_VAR, modelSpec.getBaseUrl());
     addToEnv(containerBuilder, OPENHANDS_PROMPT_ENV_VAR, taskSpec.getPrompt());
+    addToEnv(containerBuilder, OPENHANDS_REPORTER_LISTEN_PORT_ENV_VAR,
+        String.valueOf(OPENHANDS_RUNTIME_REPORTER_PORT));
     OPENHANDS_ADDITIONAL_ENV_VARS.forEach((k, v) -> addToEnv(containerBuilder, k, v));
 
     if (!containerBuilder.hasImage()) {
@@ -117,6 +122,13 @@ public class LLMTaskPodResource extends CRUDKubernetesDependentResource<Pod, LLM
       LOGGER.debug("Setting command to {}", command);
       containerBuilder.withArgs("bash", "-c", command);
     }
+
+    final var reporterPort = Integer.parseInt(containerBuilder.editMatchingEnv(
+        e -> OPENHANDS_REPORTER_LISTEN_PORT_ENV_VAR.equals(e.getName())).getValue());
+    containerBuilder.addNewPort()
+                    .withName(OPENHANDS_RUNTIME_REPORTER_PORT_NAME)
+                    .withContainerPort(reporterPort)
+                    .endPort();
   }
 
   private Optional<String> serviceAccountName(final LLMTaskResource primary,
