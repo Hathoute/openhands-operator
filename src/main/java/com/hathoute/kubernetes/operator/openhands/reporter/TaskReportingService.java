@@ -5,6 +5,7 @@ import com.hathoute.kubernetes.operator.openhands.reporter.TaskReportingRoutine.
 import com.hathoute.kubernetes.operator.openhands.resource.LLMTaskServiceResource;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.inbound.SimpleInboundEventSource;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -31,9 +33,12 @@ public class TaskReportingService {
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   private final SimpleInboundEventSource<LLMTaskResource> eventSource;
+  private final Supplier<Instant> startTime;
 
-  public TaskReportingService(final SimpleInboundEventSource<LLMTaskResource> eventSource) {
+  public TaskReportingService(final SimpleInboundEventSource<LLMTaskResource> eventSource,
+      final Supplier<Instant> startTime) {
     this.eventSource = eventSource;
+    this.startTime = startTime;
   }
 
   public synchronized void addTask(final LLMTaskResource task) {
@@ -47,7 +52,7 @@ public class TaskReportingService {
     LOGGER.info("Adding task {} to watched tasks", taskId);
     final var serviceUrl = serviceUrl(taskId);
     final var client = new TaskReporterClient(serviceUrl);
-    final var routine = new TaskReportingRoutine(taskId, client, eventSource);
+    final var routine = new TaskReportingRoutine(taskId, client, eventSource, startTime);
     watchedTasks.put(taskId, routine);
     routineFutures.put(taskId, CompletableFuture.completedFuture(null));
   }

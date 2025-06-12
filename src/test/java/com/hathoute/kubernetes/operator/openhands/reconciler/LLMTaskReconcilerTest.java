@@ -69,7 +69,7 @@ class LLMTaskReconcilerTest {
 
   @Test
   void should_patch_status_when_validation_fails() throws Exception {
-    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+    final var input = TestFixtures.YAML_MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
         LLMTaskResource.class);
     final var failed = new LLMTaskResource();
     final var status = new LLMTaskStatus();
@@ -85,7 +85,7 @@ class LLMTaskReconcilerTest {
 
   @Test
   void should_return_no_update_if_state_did_not_change() throws Exception {
-    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+    final var input = TestFixtures.YAML_MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
         LLMTaskResource.class);
     final var existingStatus = new LLMTaskStatus();
     existingStatus.setState(RUNNING);
@@ -110,7 +110,7 @@ class LLMTaskReconcilerTest {
 
   @Test
   void should_patch_status_when_pod_state_changes() throws Exception {
-    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+    final var input = TestFixtures.YAML_MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
         LLMTaskResource.class);
     final var oldStatus = new LLMTaskStatus();
     oldStatus.setState(QUEUED);
@@ -138,7 +138,7 @@ class LLMTaskReconcilerTest {
 
   @Test
   void should_return_queued_if_pod_has_no_status() throws Exception {
-    final var input = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+    final var input = TestFixtures.YAML_MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
         LLMTaskResource.class);
     final var pod = new Pod(); // no status set
 

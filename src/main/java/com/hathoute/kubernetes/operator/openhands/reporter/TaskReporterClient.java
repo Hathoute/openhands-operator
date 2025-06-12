@@ -9,8 +9,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class TaskReporterClient {
+  private static final Logger LOGGER = LoggerFactory.getLogger(TaskReporterClient.class);
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -30,12 +33,14 @@ class TaskReporterClient {
     try {
       final var response = sendGetRequest(HEALTH_ENDPOINT);
       if (response.statusCode() != 200) {
+        LOGGER.warn("Received HTTP status code {}, health is UNKNOWN", response.statusCode());
         return Health.Status.UNKNOWN;
       }
 
       final var mapped = MAPPER.readValue(response.body(), Health.class);
       return mapped.status();
     } catch (final IOException e) {
+      LOGGER.warn("Failed to read health response", e);
       return Health.Status.UNKNOWN;
     }
   }

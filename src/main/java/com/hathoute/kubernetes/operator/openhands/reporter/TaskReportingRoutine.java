@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class TaskReportingRoutine implements Runnable {
   private final ResourceID resourceId;
   private final TaskReporterClient client;
   private final SimpleInboundEventSource<LLMTaskResource> eventSource;
+  private final Supplier<Instant> timeService;
 
   @Getter
   private State currentState;
@@ -32,10 +34,12 @@ public class TaskReportingRoutine implements Runnable {
   private Instant startTime;
 
   TaskReportingRoutine(final ResourceID resourceId, final TaskReporterClient client,
-      final SimpleInboundEventSource<LLMTaskResource> eventSource) {
+      final SimpleInboundEventSource<LLMTaskResource> eventSource,
+      final Supplier<Instant> timeService) {
     this.resourceId = resourceId;
     this.client = client;
     this.eventSource = eventSource;
+    this.timeService = timeService;
 
     setState(State.WAITING);
   }
@@ -43,7 +47,7 @@ public class TaskReportingRoutine implements Runnable {
   @Override
   public void run() {
     if (startTime == null) {
-      startTime = Instant.now();
+      startTime = timeService.get();
     }
 
     switch (currentState) {
@@ -62,7 +66,7 @@ public class TaskReportingRoutine implements Runnable {
   }
 
   private void processWaitingState() {
-    if (startTime.plus(OPENHANDS_RUNTIME_HEALTH_TIMEOUT).isBefore(Instant.now())) {
+    if (startTime.plus(OPENHANDS_RUNTIME_HEALTH_TIMEOUT).isBefore(timeService.get())) {
       // We timed out, set the state to STOPPED (shutdown() requests will also fail)
       setState(State.STOPPED);
       return;
