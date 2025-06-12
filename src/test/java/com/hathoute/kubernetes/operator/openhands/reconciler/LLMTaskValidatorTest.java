@@ -39,7 +39,7 @@ class LLMTaskValidatorTest {
     try (final var kubernetesUtil = mockStatic(KubernetesUtil.class)) {
       kubernetesUtil.when(() -> KubernetesUtil.getModelForTask(eq(client), any())).thenReturn(null);
 
-      final var resource = TestFixtures.MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
+      final var resource = TestFixtures.YAML_MAPPER.readValue(TestFixtures.LLM_TASK_RESOURCE,
           LLMTaskResource.class);
       final var result = validator.validateOrErrorStatus(resource, context);
 
@@ -62,7 +62,7 @@ class LLMTaskValidatorTest {
                     .thenReturn(new LLMResource()); // simulate model exists
 
       final var yaml = TestFixtures.taskWithSvcAccount(); // no rules provided
-      final var resource = TestFixtures.MAPPER.readValue(yaml, LLMTaskResource.class);
+      final var resource = TestFixtures.YAML_MAPPER.readValue(yaml, LLMTaskResource.class);
 
       final var result = validator.validateOrErrorStatus(resource, context);
 
@@ -86,7 +86,7 @@ class LLMTaskValidatorTest {
       final var podSpec = new PodSpec();
       podSpec.setServiceAccountName("overridden-account");
       final var yaml = TestFixtures.taskWithPodSpec(podSpec);
-      final var resource = TestFixtures.MAPPER.readValue(yaml, LLMTaskResource.class);
+      final var resource = TestFixtures.YAML_MAPPER.readValue(yaml, LLMTaskResource.class);
 
       final var result = validator.validateOrErrorStatus(resource, context);
 
@@ -113,7 +113,7 @@ class LLMTaskValidatorTest {
       rule.setVerbs(List.of("get", "list"));
 
       final var yaml = TestFixtures.taskWithSvcAccount(rule);
-      final var resource = TestFixtures.MAPPER.readValue(yaml, LLMTaskResource.class);
+      final var resource = TestFixtures.YAML_MAPPER.readValue(yaml, LLMTaskResource.class);
 
       final var result = validator.validateOrErrorStatus(resource, context);
 

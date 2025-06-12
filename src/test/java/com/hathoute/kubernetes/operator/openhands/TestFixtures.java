@@ -1,6 +1,7 @@
 package com.hathoute.kubernetes.operator.openhands;
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.hathoute.kubernetes.operator.openhands.crd.LLMTaskResource;
@@ -15,8 +16,10 @@ import java.util.function.Function;
 
 public final class TestFixtures {
 
-  public static final ObjectMapper MAPPER = new ObjectMapper(
+  public static final ObjectMapper YAML_MAPPER = new ObjectMapper(
       new YAMLFactory()).setSerializationInclusion(Include.NON_NULL);
+  public static final ObjectMapper JSON_MAPPER = new ObjectMapper(
+      new JsonFactory()).setSerializationInclusion(Include.NON_NULL);
 
   public static final String WORKING_NAMESPACE = "llm-tasks-ns";
   public static final String LLM_TASK_NAME = "fix-issue-1234";
@@ -48,6 +51,12 @@ public final class TestFixtures {
         apiKey: very-secret-api-key
       """;
 
+  public static final String REPORTER_HEALTH_RESPONSE_OK = "{\"status\": \"RUNNING\"}";
+  public static final String REPORTER_HEALTH_RESPONSE_EXIT = "{\"status\": \"STOPPED\", \"statusCode\": 0}";
+
+  public static final String REPORTER_EVENTS_SUCCESS = readResource("/events/success.json");
+  public static final String REPORTER_EVENTS_ERROR = readResource("/events/error.json");
+
   public static String taskWithPodSpec(final PodSpec podSpec) {
     return taskResource(t -> {
       final var llmPod = new LLMPod();
@@ -76,11 +85,24 @@ public final class TestFixtures {
 
   private static String taskResource(final Function<LLMTaskResource, LLMTaskResource> modifier) {
     try {
-      final var resource = MAPPER.readValue(LLM_TASK_RESOURCE, LLMTaskResource.class);
+      final var resource = YAML_MAPPER.readValue(LLM_TASK_RESOURCE, LLMTaskResource.class);
       final var modified = modifier.apply(resource);
-      return MAPPER.writeValueAsString(modified);
+      return YAML_MAPPER.writeValueAsString(modified);
     } catch (final IOException e) {
       throw new IllegalStateException("Failed to serialize/deserialize LLMTaskResource", e);
+    }
+  }
+
+  private static String readResource(final String resourcePath) {
+    final var resource = TestFixtures.class.getResourceAsStream(resourcePath);
+    if (resource == null) {
+      throw new IllegalStateException("File " + resourcePath + " is not found");
+    }
+
+    try {
+      return new String(resource.readAllBytes());
+    } catch (final IOException e) {
+      throw new IllegalStateException("Failed to read file " + resourcePath, e);
     }
   }
 }
